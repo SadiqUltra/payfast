@@ -106,7 +106,7 @@ Class PaymentController extends Controller
         $payfast->setBuyer('first name', 'last name', 'email');
 
         //PS ADD DIVISION BY 100 FOR CENTS AS THE NEW DEPENDENCY "mathiasverraes/money": "^1.3" DOESN'T DO CONVERSION
-        payfast->setAmount($purchase->amount / 100);
+        $payfast->setAmount($purchase->amount / 100);
 
         $payfast->setItem('item-title', 'item-description');
         $payfast->setMerchantReference($order->m_payment_id);
