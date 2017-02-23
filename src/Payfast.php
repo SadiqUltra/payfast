@@ -196,20 +196,19 @@ class Payfast implements PaymentProcessor
     }
 
     /**
-     * Perform security checks
+     * Perform security checks, decoupling amount
      *
      * @param $request
-     * @param int $amount
      * @return $this
      * @throws Exception
      */
-    public function verify($request, $amount)
+    public function verify($request)
     {
         $this->setHeader();
 
         $this->response_vars = $request->all();
 
-        $this->setAmount($amount);
+        //$this->setAmount($amount);
 
         foreach ($this->response_vars as $key => $val) {
             $this->vars[$key] = stripslashes($val);
@@ -221,8 +220,8 @@ class Payfast implements PaymentProcessor
         $this->validSignature($request->get('signature'));
         Log::info('Validating host');
         $this->validateHost($request);
-        Log::info('Validating amount');
-        $this->validateAmount((int)$request->get('amount_gross'));
+        //Log::info('Validating amount');
+        //$this->validateAmount((int)$request->get('amount_gross'));
         Log::info('Validating payfast data');
         $this->validatePayfastData($request);
 
