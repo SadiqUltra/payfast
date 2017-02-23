@@ -1,13 +1,15 @@
 <?php
 
-namespace garethnic\payfast;
+namespace IoDigital\Payfast;
 
-use garethnic\payfast\Contracts\PaymentProcessor;
-use Illuminate\Http\Request;
-use SebastianBergmann\Money\Currency;
-use SebastianBergmann\Money\Money;
-use Illuminate\Support\Facades\Log;
 use Exception;
+
+use Money\Money;
+use Money\Currency;
+use Illuminate\Http\Request;
+use Money\IntlMoneyFormatter;
+use Illuminate\Support\Facades\Log;
+use IoDigital\Payfast\Contracts\PaymentProcessor;
 
 // Messages
 // Error
@@ -118,7 +120,7 @@ class Payfast implements PaymentProcessor
     {
         $money = $this->newMoney($amount);
 
-        $this->amount = $money->getConvertedAmount();
+        $this->amount = $money->getAmount();
     }
 
     /**
@@ -138,6 +140,18 @@ class Payfast implements PaymentProcessor
         $this->vars['signature'] = md5($this->output);
 
         return $this->buildForm();
+    }
+
+    public function paymentUrl()
+    {
+
+        $this->vars = $this->paymentVars();
+
+        $this->buildQueryString();
+
+        $this->vars['signature'] = md5($this->output);
+
+        return $this->buildUrl();
     }
 
     /**
@@ -193,20 +207,41 @@ class Payfast implements PaymentProcessor
         return $htmlForm . '</form>';
     }
 
+
+
     /**
-     * Perform security checks, decoupling amount
+     * Form building grunt work
+     *
+     * @return string
+     */
+    public function buildUrl()
+    {
+        $this->getHost();
+
+        $url = 'https://' . $this->host . '/eng/process?';
+
+        foreach ($this->vars as $name => $value) {
+            $url .= $name . '=' . $value . '&';
+        }
+
+        return $url;
+    }
+
+    /**
+     * Perform security checks
      *
      * @param $request
+     * @param int $amount
      * @return $this
      * @throws Exception
      */
-    public function verify($request)
+    public function verify($request, $amount)
     {
         $this->setHeader();
 
         $this->response_vars = $request->all();
 
-        //$this->setAmount($amount);
+        $this->setAmount($amount);
 
         foreach ($this->response_vars as $key => $val) {
             $this->vars[$key] = stripslashes($val);
@@ -218,9 +253,8 @@ class Payfast implements PaymentProcessor
         $this->validSignature($request->get('signature'));
         Log::info('Validating host');
         $this->validateHost($request);
-        // Verify amount from controller
-        //Log::info('Validating amount');
-        //$this->validateAmount($request->get('amount_gross'));
+        Log::info('Validating amount');
+        $this->validateAmount((int)$request->get('amount_gross'));
         Log::info('Validating payfast data');
         $this->validatePayfastData($request);
 
@@ -275,10 +309,15 @@ class Payfast implements PaymentProcessor
     public function validateHost($request)
     {
         $hosts = $this->getHosts();
-
-        //REMOTE_ADDR returns ::1 ipv6 localhost
-        if (!in_array($request->server('HTTP_X_FORWARDED_FOR'), $hosts)) {
-            throw new Exception('Not a valid Host');
+        
+        if (!strcmp($request->server('REMOTE_ADDR'), '::1') == 0) {
+            if (!in_array($request->server('REMOTE_ADDR'), $hosts)) {
+                throw new Exception('Not a valid Host');
+            }
+        } elseif (!strcmp($request->server('HTTP_X_FORWARDED_FOR'), '::1') == 0) {
+            if (!in_array($request->server('HTTP_X_FORWARDED_FOR'), $hosts)) {
+                throw new Exception('Not a valid Host');
+            }
         }
 
         return true;
@@ -318,7 +357,10 @@ class Payfast implements PaymentProcessor
      */
     public function validateAmount($grossAmount)
     {
-        if ($this->amount === $this->newMoney($grossAmount, true)->getConvertedAmount()) {
+        $amountToValidate = $this->newMoney($grossAmount);
+        $conversion = $amountToValidate->getAmount() * 100;
+        
+        if ($this->amount === $conversion) {
             return true;
         } else {
             throw new Exception('The gross amount does not match the order amount');
@@ -333,10 +375,6 @@ class Payfast implements PaymentProcessor
      */
     public function newMoney($amount)
     {
-        if (is_string($amount) || is_float($amount)) {
-            return Money::fromString((string)$amount, new Currency('ZAR'));
-        }
-
         return new Money($amount, new Currency('ZAR'));
     }
 
